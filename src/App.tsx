@@ -3,7 +3,6 @@ import {
   BrowserRouter as Router, 
   Routes, 
   Route, 
-  Navigate, 
   useNavigate, 
   Link, 
   useParams,
@@ -51,10 +50,8 @@ import { generateMaturityReport } from './services/geminiService';
 const API_URL = "/api";
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
   return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
+    'Content-Type': 'application/json'
   };
 };
 
@@ -843,9 +840,10 @@ export default function App() {
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
-    if (savedUser && token) {
+    if (savedUser) {
       setUser(JSON.parse(savedUser));
+    } else {
+      setUser({ id: 0, email: 'visitor@example.com', role: 'client' });
     }
     setLoading(false);
   }, []);
@@ -872,13 +870,13 @@ export default function App() {
           <Sidebar user={user} />
           <main className="flex-1">
             <Routes>
-              <Route path="/login" element={!user ? <LoginPage onLogin={handleLogin} /> : <Navigate to="/" />} />
-              <Route path="/" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-              <Route path="/companies" element={user ? <CompaniesPage /> : <Navigate to="/login" />} />
-              <Route path="/assessments" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-              <Route path="/assessments/new" element={user ? <NewAssessment /> : <Navigate to="/login" />} />
-              <Route path="/assessments/:id" element={user ? <AssessmentForm /> : <Navigate to="/login" />} />
-              <Route path="/reports/:id" element={user ? <ReportPage /> : <Navigate to="/login" />} />
+              <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/companies" element={<CompaniesPage />} />
+              <Route path="/assessments" element={<Dashboard />} />
+              <Route path="/assessments/new" element={<NewAssessment />} />
+              <Route path="/assessments/:id" element={<AssessmentForm />} />
+              <Route path="/reports/:id" element={<ReportPage />} />
             </Routes>
           </main>
         </div>
