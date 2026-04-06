@@ -13,7 +13,8 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("database.sqlite");
+const dbPath = process.env.VERCEL ? "/tmp/database.sqlite" : "database.sqlite";
+const db = new Database(dbPath);
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
 
 // Initialize Database
@@ -93,9 +94,9 @@ if (adminCount.count === 0) {
   db.prepare("INSERT INTO users (email, password, role) VALUES (?, ?, ?)").run("admin@example.com", hashedPassword, "admin");
 }
 
-async function startServer() {
+export async function createApp(options?: { serveFrontend?: boolean }) {
+  const serveFrontend = options?.serveFrontend ?? process.env.NODE_ENV !== "production";
   const app = express();
-  const PORT = 3000;
 
   app.use(cors());
   app.use(express.json());
@@ -202,13 +203,13 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  if (serveFrontend && process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (serveFrontend) {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -216,9 +217,18 @@ async function startServer() {
     });
   }
 
+  return app;
+}
+
+async function startServer() {
+  const app = await createApp({ serveFrontend: true });
+  const PORT = 3000;
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
