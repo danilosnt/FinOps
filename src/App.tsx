@@ -11,7 +11,6 @@ import {
   ArrowRight,
   RefreshCcw,
   Download,
-  Database,
   Info
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
@@ -362,27 +361,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Database Explanation Section */}
-              <div className="mt-12 p-8 bg-blue-50 rounded-[2rem] border border-blue-100 space-y-4">
-                <div className="flex items-center gap-3 font-bold text-blue-900">
-                  <Database size={20} />
-                  Como funciona o Banco de Dados?
-                </div>
-                <div className="text-sm text-blue-800 leading-relaxed space-y-3">
-                  <p>
-                    Para rodar hospedado na <strong>Vercel</strong>, utilizamos o <strong>Firebase Firestore</strong> como banco de dados NoSQL. 
-                    Diferente de um banco de dados tradicional que exigiria um servidor dedicado, o Firebase é <em>Serverless</em>.
-                  </p>
-                  <ul className="list-disc list-inside space-y-1 opacity-80">
-                    <li><strong>Independência:</strong> O banco de dados roda nos servidores do Google, enquanto o site roda na Vercel.</li>
-                    <li><strong>Segurança:</strong> As regras de segurança (Firestore Rules) garantem que apenas dados válidos sejam salvos.</li>
-                    <li><strong>Escalabilidade:</strong> Suporta milhares de usuários sem necessidade de configuração manual de infraestrutura.</li>
-                  </ul>
-                  <p className="font-semibold">
-                    Ao subir para o GitHub e Vercel, você só precisa configurar a variável de ambiente <code>GEMINI_API_KEY</code> no painel da Vercel.
-                  </p>
-                </div>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
