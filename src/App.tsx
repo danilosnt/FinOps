@@ -1,886 +1,400 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  BrowserRouter as Router, 
-  Routes, 
-  Route, 
-  useNavigate, 
-  Link, 
-  useParams,
-  useSearchParams 
-} from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  PlusCircle, 
-  ClipboardCheck, 
-  FileText, 
-  LogOut, 
-  Building2, 
-  ChevronRight, 
-  CheckCircle2, 
-  AlertCircle,
-  BarChart3,
-  PieChart,
-  Settings,
-  User as UserIcon,
-  TrendingUp,
-  ArrowRight,
-  Loader2
-} from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Cell,
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis
-} from 'recharts';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from './lib/utils';
-import { User, Company, Question, Answer, Assessment, MaturityScore } from './types';
-import { generateMaturityReport } from './services/geminiService';
+import { 
+  BarChart3, 
+  ChevronRight, 
+  ChevronLeft, 
+  ClipboardCheck, 
+  TrendingUp, 
+  ShieldCheck, 
+  Activity,
+  ArrowRight,
+  RefreshCcw,
+  Download,
+  Database,
+  Info
+} from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
+import { QUESTIONS } from './types';
+import Markdown from 'react-markdown';
 
-// --- API Helpers ---
-const API_URL = "/api";
+// Initialize Gemini
+const apiKey = process.env.GEMINI_API_KEY || "";
+const ai = new GoogleGenAI({ apiKey });
 
-const getAuthHeaders = () => {
-  return {
-    'Content-Type': 'application/json'
-  };
-};
-
-// --- Components ---
-
-const Navbar = ({ user, onLogout }: { user: User | null, onLogout: () => void }) => {
-  if (!user) return null;
-  return (
-    <nav className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 sticky top-0 z-50">
-      <div className="flex items-center gap-2">
-        <div className="bg-indigo-600 p-1.5 rounded-lg">
-          <TrendingUp className="text-white w-5 h-5" />
-        </div>
-        <span className="font-bold text-slate-900 text-lg tracking-tight">FinOps Maturity</span>
-      </div>
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2 text-slate-600">
-          <UserIcon className="w-4 h-4" />
-          <span className="text-sm font-medium">{user.email}</span>
-          <span className="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">
-            {user.role}
-          </span>
-        </div>
-        <button 
-          onClick={onLogout}
-          className="text-slate-400 hover:text-red-500 transition-colors"
-          title="Sair"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
-      </div>
-    </nav>
-  );
-};
-
-const Sidebar = ({ user }: { user: User | null }) => {
-  if (!user) return null;
-  const links = [
-    { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/companies", icon: Building2, label: "Empresas" },
-    { to: "/assessments", icon: ClipboardCheck, label: "Avaliações" },
-  ];
-
-  return (
-    <aside className="w-64 bg-slate-50 border-r border-slate-200 h-[calc(100vh-64px)] p-4 flex flex-col gap-2 sticky top-16">
-      {links.map(link => (
-        <Link 
-          key={link.to} 
-          to={link.to}
-          className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 hover:bg-white hover:text-indigo-600 hover:shadow-sm transition-all font-medium"
-        >
-          <link.icon className="w-5 h-5" />
-          {link.label}
-        </Link>
-      ))}
-    </aside>
-  );
-};
-
-const LoginPage = ({ onLogin }: { onLogin: (user: User, token: string) => void }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        onLogin(data.user, data.token);
-        navigate('/');
-      } else {
-        setError(data.error || 'Erro ao fazer login');
-      }
-    } catch (err) {
-      setError('Erro de conexão');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-md w-full bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100"
-      >
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-indigo-600 p-3 rounded-2xl mb-4 shadow-lg shadow-indigo-200">
-            <TrendingUp className="text-white w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900">Bem-vindo de volta</h1>
-          <p className="text-slate-500 text-sm mt-1">Entre para gerenciar suas avaliações FinOps</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">E-mail</label>
-            <input 
-              type="email" 
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              placeholder="seu@email.com"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Senha</label>
-            <input 
-              type="password" 
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 text-red-600 text-sm flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              {error}
-            </div>
-          )}
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Entrar"}
-          </button>
-        </form>
-        
-        <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-          <p className="text-xs text-slate-400">
-            Dica: Use <span className="font-mono text-slate-600">admin@example.com</span> / <span className="font-mono text-slate-600">admin123</span> para testes.
-          </p>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-const Dashboard = () => {
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`${API_URL}/user/assessments`, { headers: getAuthHeaders() })
-      .then(res => res.json())
-      .then(data => {
-        setAssessments(data);
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
-
-  return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1">Visão geral das suas avaliações de maturidade.</p>
-        </div>
-        <Link 
-          to="/assessments/new"
-          className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
-        >
-          <PlusCircle className="w-5 h-5" />
-          Nova Avaliação
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-3 text-indigo-600 mb-2">
-            <ClipboardCheck className="w-5 h-5" />
-            <span className="text-sm font-bold uppercase tracking-wider">Total</span>
-          </div>
-          <div className="text-4xl font-black text-slate-900">{assessments.length}</div>
-          <div className="text-xs text-slate-400 mt-1">Avaliações realizadas</div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-3 text-emerald-600 mb-2">
-            <CheckCircle2 className="w-5 h-5" />
-            <span className="text-sm font-bold uppercase tracking-wider">Concluídas</span>
-          </div>
-          <div className="text-4xl font-black text-slate-900">
-            {assessments.filter(a => a.status === 'completed').length}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">Prontas para relatório</div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-3 text-amber-600 mb-2">
-            <FileText className="w-5 h-5" />
-            <span className="text-sm font-bold uppercase tracking-wider">Em Aberto</span>
-          </div>
-          <div className="text-4xl font-black text-slate-900">
-            {assessments.filter(a => a.status === 'draft').length}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">Aguardando preenchimento</div>
-        </div>
-      </div>
-
-      <h2 className="text-xl font-bold text-slate-900 mb-4">Avaliações Recentes</h2>
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Empresa</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Data</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {assessments.map(a => (
-              <tr key={a.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-6 py-4 font-semibold text-slate-900">{a.company_name}</td>
-                <td className="px-6 py-4 text-sm text-slate-500">{new Date(a.date).toLocaleDateString()}</td>
-                <td className="px-6 py-4">
-                  <span className={cn(
-                    "text-[10px] font-bold uppercase px-2 py-1 rounded-full",
-                    a.status === 'completed' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                  )}>
-                    {a.status === 'completed' ? 'Concluída' : 'Rascunho'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <Link 
-                    to={a.status === 'completed' ? `/reports/${a.id}` : `/assessments/${a.id}`}
-                    className="text-indigo-600 hover:text-indigo-800 font-bold text-sm inline-flex items-center gap-1"
-                  >
-                    {a.status === 'completed' ? 'Ver Relatório' : 'Continuar'}
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {assessments.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
-                  Nenhuma avaliação encontrada. Comece uma agora!
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-const CompaniesPage = () => {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState('');
-  const [industry, setIndustry] = useState('');
-  const [size, setSize] = useState('');
-
-  const fetchCompanies = () => {
-    fetch(`${API_URL}/companies`, { headers: getAuthHeaders() })
-      .then(res => res.json())
-      .then(data => {
-        setCompanies(data);
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const res = await fetch(`${API_URL}/companies`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ name, industry, size })
-    });
-    if (res.ok) {
-      setName(''); setIndustry(''); setSize('');
-      setShowForm(false);
-      fetchCompanies();
-    }
-  };
-
-  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
-
-  return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Empresas Clientes</h1>
-          <p className="text-slate-500 mt-1">Gerencie as empresas que serão avaliadas.</p>
-        </div>
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
-        >
-          <PlusCircle className="w-5 h-5" />
-          Nova Empresa
-        </button>
-      </div>
-
-      <AnimatePresence>
-        {showForm && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden mb-8"
-          >
-            <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Nome da Empresa</label>
-                <input 
-                  type="text" 
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Indústria</label>
-                <input 
-                  type="text" 
-                  value={industry}
-                  onChange={e => setIndustry(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Tamanho</label>
-                <select 
-                  value={size}
-                  onChange={e => setSize(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                  required
-                >
-                  <option value="">Selecione...</option>
-                  <option value="Pequena">Pequena (1-50)</option>
-                  <option value="Média">Média (51-500)</option>
-                  <option value="Grande">Grande (500+)</option>
-                </select>
-              </div>
-              <div className="md:col-span-3 flex justify-end">
-                <button type="submit" className="bg-slate-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-slate-800 transition-all">
-                  Salvar Empresa
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {companies.map(c => (
-          <div key={c.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-indigo-50 transition-colors">
-                <Building2 className="w-6 h-6 text-slate-600 group-hover:text-indigo-600" />
-              </div>
-              <span className="text-[10px] font-bold uppercase bg-slate-100 text-slate-500 px-2 py-0.5 rounded">
-                {c.size}
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900">{c.name}</h3>
-            <p className="text-sm text-slate-500 mb-6">{c.industry}</p>
-            <Link 
-              to={`/assessments/new?companyId=${c.id}`}
-              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-indigo-600 text-indigo-600 font-bold hover:bg-indigo-600 hover:text-white transition-all text-sm"
-            >
-              <ClipboardCheck className="w-4 h-4" />
-              Nova Avaliação
-            </Link>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const AssessmentForm = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [assessment, setAssessment] = useState<Assessment | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<Record<number, { score: number, comments: string }>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const [qRes, aRes] = await Promise.all([
-        fetch(`${API_URL}/questions`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/assessments/${id}`, { headers: getAuthHeaders() })
-      ]);
-      const qData = await qRes.json();
-      const aData = await aRes.json();
-      
-      setQuestions(qData);
-      setAssessment(aData);
-      
-      const initialAnswers: Record<number, { score: number, comments: string }> = {};
-      aData.answers?.forEach((ans: Answer) => {
-        initialAnswers[ans.question_id] = { score: ans.score, comments: ans.comments };
-      });
-      setAnswers(initialAnswers);
-      setLoading(false);
-    };
-    fetchData();
-  }, [id]);
-
-  const handleScoreChange = (qId: number, score: number) => {
-    setAnswers(prev => ({
-      ...prev,
-      [qId]: { ...prev[qId], score }
-    }));
-  };
-
-  const handleCommentChange = (qId: number, comments: string) => {
-    setAnswers(prev => ({
-      ...prev,
-      [qId]: { ...prev[qId], comments }
-    }));
-  };
-
-  const handleSubmit = async () => {
-    setSaving(true);
-    const answersArray = Object.entries(answers).map(([qId, data]) => {
-      const d = data as { score: number, comments: string };
-      return {
-        question_id: parseInt(qId),
-        score: d.score,
-        comments: d.comments
-      };
-    });
-
-    const res = await fetch(`${API_URL}/assessments/${id}/answers`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ answers: answersArray })
-    });
-
-    if (res.ok) {
-      navigate(`/reports/${id}`);
-    } else {
-      setSaving(false);
-      alert('Erro ao salvar avaliação');
-    }
-  };
-
-  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
-
-  const categories = ['Informar', 'Otimizar', 'Operar'] as const;
-
-  return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Avaliação de Maturidade</h1>
-        <p className="text-slate-500 mt-1">Empresa: <span className="font-bold text-indigo-600">{assessment?.company_name}</span></p>
-      </div>
-
-      <div className="space-y-12">
-        {categories.map(cat => (
-          <div key={cat} className="space-y-6">
-            <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
-              <div className={cn(
-                "w-3 h-3 rounded-full",
-                cat === 'Informar' ? "bg-blue-500" : cat === 'Otimizar' ? "bg-emerald-500" : "bg-amber-500"
-              )} />
-              <h2 className="text-xl font-bold text-slate-800">{cat}</h2>
-            </div>
-            
-            <div className="space-y-4">
-              {questions.filter(q => q.category === cat).map(q => (
-                <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                  <p className="font-semibold text-slate-900 mb-4">{q.text}</p>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {[0, 1, 2, 3, 4].map(s => (
-                      <button
-                        key={s}
-                        onClick={() => handleScoreChange(q.id, s)}
-                        className={cn(
-                          "w-10 h-10 rounded-lg font-bold transition-all border",
-                          answers[q.id]?.score === s 
-                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md" 
-                            : "bg-slate-50 text-slate-400 border-slate-200 hover:border-indigo-300"
-                        )}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                    <span className="ml-4 text-xs text-slate-400 flex items-center">
-                      {answers[q.id]?.score === 0 ? "Inexistente" : 
-                       answers[q.id]?.score === 4 ? "Otimizado/Automático" : "Em evolução"}
-                    </span>
-                  </div>
-                  <textarea
-                    placeholder="Comentários ou evidências..."
-                    value={answers[q.id]?.comments || ''}
-                    onChange={e => handleCommentChange(q.id, e.target.value)}
-                    className="w-full p-3 text-sm rounded-xl border border-slate-100 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all min-h-[80px]"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-12 flex justify-end gap-4">
-        <button 
-          onClick={() => navigate('/')}
-          className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-all"
-        >
-          Cancelar
-        </button>
-        <button 
-          onClick={handleSubmit}
-          disabled={saving || questions.length !== Object.keys(answers).length}
-          className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center gap-2"
-        >
-          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-          Finalizar Avaliação
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const NewAssessment = () => {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  useEffect(() => {
-    fetch(`${API_URL}/companies`, { headers: getAuthHeaders() })
-      .then(res => res.json())
-      .then(data => {
-        setCompanies(data);
-        const cid = searchParams.get('companyId');
-        if (cid) setSelectedCompanyId(cid);
-      });
-  }, [searchParams]);
-
-  const handleStart = async () => {
-    const res = await fetch(`${API_URL}/assessments`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ company_id: selectedCompanyId })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      navigate(`/assessments/${data.id}`);
-    }
-  };
-
-  return (
-    <div className="p-8 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Iniciar Nova Avaliação</h1>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-bold text-slate-700 mb-1.5">Selecione a Empresa</label>
-          <select 
-            value={selectedCompanyId}
-            onChange={e => setSelectedCompanyId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 outline-none"
-          >
-            <option value="">Escolha uma empresa...</option>
-            {companies.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-        <button 
-          onClick={handleStart}
-          disabled={!selectedCompanyId}
-          className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
-        >
-          Começar
-        </button>
-        <p className="text-center text-sm text-slate-400">
-          Não encontrou a empresa? <Link to="/companies" className="text-indigo-600 font-bold">Cadastre aqui</Link>
-        </p>
-      </div>
-    </div>
-  );
-};
-
-const ReportPage = () => {
-  const { id } = useParams();
-  const [assessment, setAssessment] = useState<Assessment | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [aiReport, setAiReport] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const [qRes, aRes] = await Promise.all([
-        fetch(`${API_URL}/questions`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/assessments/${id}`, { headers: getAuthHeaders() })
-      ]);
-      setQuestions(await qRes.json());
-      setAssessment(await aRes.json());
-      setLoading(false);
-    };
-    fetchData();
-  }, [id]);
-
-  const scores = useMemo(() => {
-    if (!assessment?.answers || questions.length === 0) return null;
-    
-    const catScores: Record<string, { sum: number, count: number }> = {
-      'Informar': { sum: 0, count: 0 },
-      'Otimizar': { sum: 0, count: 0 },
-      'Operar': { sum: 0, count: 0 }
-    };
-
-    assessment.answers.forEach(ans => {
-      const q = questions.find(q => q.id === ans.question_id);
-      if (q) {
-        catScores[q.category].sum += ans.score;
-        catScores[q.category].count += 1;
-      }
-    });
-
-    const informar = catScores['Informar'].sum / (catScores['Informar'].count || 1);
-    const otimizar = catScores['Otimizar'].sum / (catScores['Otimizar'].count || 1);
-    const operar = catScores['Operar'].sum / (catScores['Operar'].count || 1);
-    const overall = (informar + otimizar + operar) / 3;
-
-    return { overall, informar, otimizar, operar };
-  }, [assessment, questions]);
-
-  const handleGenerateAI = async () => {
-    if (!scores || !assessment) return;
-    setGenerating(true);
-    const report = await generateMaturityReport(
-      assessment.company_name,
-      scores,
-      questions,
-      assessment.answers || []
-    );
-    setAiReport(report || '');
-    setGenerating(false);
-  };
-
-  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>;
-  if (!scores) return <div>Erro ao carregar scores.</div>;
-
-  const chartData = [
-    { subject: 'Informar', A: scores.informar, fullMark: 4 },
-    { subject: 'Otimizar', A: scores.otimizar, fullMark: 4 },
-    { subject: 'Operar', A: scores.operar, fullMark: 4 },
-  ];
-
-  const getMaturityLevel = (score: number) => {
-    if (score < 1) return { label: "Iniciante", color: "text-red-600", bg: "bg-red-50" };
-    if (score < 2.5) return { label: "Em Evolução", color: "text-amber-600", bg: "bg-amber-50" };
-    if (score < 3.5) return { label: "Maduro", color: "text-blue-600", bg: "bg-blue-50" };
-    return { label: "Líder / Otimizado", color: "text-emerald-600", bg: "bg-emerald-50" };
-  };
-
-  const level = getMaturityLevel(scores.overall);
-
-  return (
-    <div className="p-8 max-w-6xl mx-auto pb-20">
-      <div className="flex justify-between items-start mb-10">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Relatório de Maturidade FinOps</h1>
-          <p className="text-slate-500 mt-1">Empresa: <span className="font-bold text-indigo-600">{assessment?.company_name}</span></p>
-        </div>
-        <div className={cn("px-6 py-3 rounded-2xl flex flex-col items-center", level.bg)}>
-          <span className="text-[10px] font-bold uppercase text-slate-400 mb-1">Score Geral</span>
-          <span className={cn("text-3xl font-black", level.color)}>{scores.overall.toFixed(1)}</span>
-          <span className={cn("text-xs font-bold", level.color)}>{level.label}</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Radar de Maturidade</h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-                <PolarGrid stroke="#e2e8f0" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 4]} tick={false} axisLine={false} />
-                <Radar
-                  name="Maturidade"
-                  dataKey="A"
-                  stroke="#4f46e5"
-                  fill="#4f46e5"
-                  fillOpacity={0.2}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {[
-            { label: 'Informar', score: scores.informar, color: 'bg-blue-500', desc: 'Visibilidade, alocação e monitoramento de custos.' },
-            { label: 'Otimizar', score: scores.otimizar, color: 'bg-emerald-500', desc: 'Eficiência de recursos, instâncias reservadas e rightsizing.' },
-            { label: 'Operar', score: scores.operar, color: 'bg-amber-500', desc: 'Governança, cultura organizacional e automação.' },
-          ].map(item => (
-            <div key={item.label} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-slate-700">{item.label}</span>
-                <span className="text-lg font-black text-slate-900">{item.score.toFixed(1)}/4.0</span>
-              </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-3">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(item.score / 4) * 100}%` }}
-                  className={cn("h-full rounded-full", item.color)}
-                />
-              </div>
-              <p className="text-xs text-slate-400">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden mb-12">
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-indigo-500 p-2 rounded-xl">
-              <TrendingUp className="w-6 h-6" />
-            </div>
-            <h2 className="text-2xl font-bold">Análise Inteligente (Gemini AI)</h2>
-          </div>
-          
-          {!aiReport ? (
-            <div className="py-10 flex flex-col items-center text-center">
-              <p className="text-slate-400 mb-6 max-w-md">
-                Use nossa IA para cruzar os dados da avaliação e gerar um plano de ação personalizado com foco em ROI e eficiência.
-              </p>
-              <button 
-                onClick={handleGenerateAI}
-                disabled={generating}
-                className="bg-white text-slate-900 px-8 py-3 rounded-xl font-bold hover:bg-slate-100 transition-all flex items-center gap-2"
-              >
-                {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
-                Gerar Relatório Estratégico
-              </button>
-            </div>
-          ) : (
-            <div className="prose prose-invert max-w-none mt-6 bg-slate-800/50 p-8 rounded-2xl border border-white/10">
-              <div className="whitespace-pre-wrap text-slate-200 leading-relaxed">
-                {aiReport}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/20 blur-[100px] -mr-32 -mt-32" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-600/20 blur-[100px] -ml-32 -mb-32" />
-      </div>
-    </div>
-  );
-};
-
-// --- Main App ---
+type Step = 'landing' | 'questions' | 'loading' | 'results';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState<Step>('landing');
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [report, setReport] = useState<string>("");
+  const [finalScore, setFinalScore] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    } else {
-      setUser({ id: 0, email: 'visitor@example.com', role: 'client' });
+  const handleStart = () => {
+    if (!apiKey) {
+      setError("Gemini API Key is missing. Please set it in your environment variables.");
+      return;
     }
-    setLoading(false);
-  }, []);
-
-  const handleLogin = (user: User, token: string) => {
-    localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('token', token);
-    setUser(user);
+    setStep('questions');
+    setCurrentQuestionIndex(0);
+    setAnswers({});
+    setSavedId(null);
+    setError(null);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    setUser(null);
+  const handleAnswer = (score: number) => {
+    const question = QUESTIONS[currentQuestionIndex];
+    const newAnswers = { ...answers, [question.id]: score };
+    setAnswers(newAnswers);
+
+    if (currentQuestionIndex < QUESTIONS.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    } else {
+      generateReport(newAnswers);
+    }
   };
 
-  if (loading) return null;
+  const generateReport = async (finalAnswers: Record<string, number>) => {
+    setStep('loading');
+    
+    // Calculate average score (1-5)
+    const total = Object.values(finalAnswers).reduce((acc, val) => acc + val, 0);
+    const avg = total / QUESTIONS.length;
+    setFinalScore(Number(avg.toFixed(1)));
+
+    try {
+      const prompt = `
+        Você é um especialista em FinOps. Com base nos seguintes resultados de avaliação (pontuações de 1 a 5, onde 1 é baixa maturidade e 5 é alta maturidade), gere um relatório de maturidade profissional.
+        
+        Resultados da Avaliação:
+        ${QUESTIONS.map(q => `- ${q.text}: ${finalAnswers[q.id]}/5`).join('\n')}
+        
+        Pontuação Geral de Maturidade: ${avg.toFixed(1)}/5
+        
+        O relatório deve incluir:
+        1. Resumo Executivo
+        2. Principais Pontos Fortes
+        3. Lacunas Críticas
+        4. Recomendações Acionáveis (curto, médio e longo prazo)
+        
+        Formate a saída em Markdown limpo e em Português do Brasil.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+      });
+
+      const reportText = response.text || "Falha ao gerar o relatório.";
+      setReport(reportText);
+      setStep('results');
+      
+      // Save to Firestore
+      saveToFirestore(avg, finalAnswers, reportText);
+    } catch (error) {
+      console.error("Erro ao gerar relatório:", error);
+      setReport("Ocorreu um erro ao gerar o relatório. Por favor, tente novamente.");
+      setStep('results');
+    }
+  };
+
+  const saveToFirestore = async (score: number, finalAnswers: Record<string, number>, reportText: string) => {
+    setIsSaving(true);
+    try {
+      const docRef = await addDoc(collection(db, 'assessments'), {
+        score,
+        answers: finalAnswers,
+        report: reportText,
+        createdAt: serverTimestamp()
+      });
+      setSavedId(docRef.id);
+    } catch (error) {
+      console.error("Erro ao salvar no Firestore:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
-    <Router>
-      <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-        <Navbar user={user} onLogout={handleLogout} />
-        <div className="flex">
-          <Sidebar user={user} />
-          <main className="flex-1">
-            <Routes>
-              <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/companies" element={<CompaniesPage />} />
-              <Route path="/assessments" element={<Dashboard />} />
-              <Route path="/assessments/new" element={<NewAssessment />} />
-              <Route path="/assessments/:id" element={<AssessmentForm />} />
-              <Route path="/reports/:id" element={<ReportPage />} />
-            </Routes>
-          </main>
+    <div className="min-h-screen bg-[#F5F5F5] font-sans text-[#1A1A1A] selection:bg-[#1A1A1A] selection:text-white">
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
+        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 font-semibold tracking-tight">
+            <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center text-white">
+              <BarChart3 size={18} />
+            </div>
+            <span>Maturidade FinOps</span>
+          </div>
+          <div className="flex items-center gap-4 text-sm font-medium text-gray-500">
+            <span className="hidden sm:inline">Ferramenta de Avaliação Profissional</span>
+            <div className="w-px h-4 bg-gray-200" />
+            <Activity size={16} className="text-emerald-500" />
+          </div>
         </div>
-      </div>
-    </Router>
+      </header>
+
+      <main className="pt-32 pb-20 px-6 max-w-3xl mx-auto">
+        <AnimatePresence mode="wait">
+          {step === 'landing' && (
+            <motion.div
+              key="landing"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8"
+            >
+              <div className="space-y-4">
+                <h1 className="text-5xl font-bold tracking-tight leading-[1.1]">
+                  Avalie sua Maturidade <br />
+                  <span className="text-gray-400">Financeira em Nuvem.</span>
+                </h1>
+                <p className="text-xl text-gray-600 max-w-xl leading-relaxed">
+                  Uma avaliação abrangente de 5 minutos para avaliar as práticas de FinOps da sua organização e receber um roadmap gerado por IA.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  { icon: <TrendingUp size={20} />, title: "Visibilidade", desc: "Transparência de custos" },
+                  { icon: <ShieldCheck size={20} />, title: "Otimização", desc: "Eficiência de recursos" },
+                  { icon: <Activity size={20} />, title: "Governança", desc: "Controle de políticas" }
+                ].map((item, i) => (
+                  <div key={i} className="p-6 bg-white rounded-2xl border border-gray-100 shadow-sm space-y-3">
+                    <div className="text-gray-400">{item.icon}</div>
+                    <div>
+                      <div className="font-semibold">{item.title}</div>
+                      <div className="text-xs text-gray-500">{item.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleStart}
+                className="group flex items-center gap-3 bg-[#1A1A1A] text-white px-8 py-4 rounded-full font-semibold hover:bg-gray-800 transition-all active:scale-95"
+              >
+                Iniciar Avaliação
+                <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+
+              {error && (
+                <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm font-medium flex items-center gap-2">
+                  <Info size={16} />
+                  {error}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {step === 'questions' && (
+            <motion.div
+              key="questions"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-12"
+            >
+              <div className="space-y-2">
+                <div className="flex justify-between items-end">
+                  <span className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                    Pergunta {currentQuestionIndex + 1} de {QUESTIONS.length}
+                  </span>
+                  <span className="text-xs font-mono text-gray-400">
+                    {Math.round(((currentQuestionIndex + 1) / QUESTIONS.length) * 100)}% Concluído
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                  <motion.div 
+                    className="h-full bg-[#1A1A1A]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${((currentQuestionIndex + 1) / QUESTIONS.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                <h2 className="text-3xl font-bold tracking-tight leading-tight">
+                  {QUESTIONS[currentQuestionIndex].text}
+                </h2>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {[1, 2, 3, 4, 5].map((score) => (
+                    <button
+                      key={score}
+                      onClick={() => handleAnswer(score)}
+                      className="group flex items-center justify-between p-6 bg-white rounded-2xl border border-gray-200 hover:border-[#1A1A1A] hover:bg-gray-50 transition-all text-left"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center font-mono text-sm group-hover:bg-[#1A1A1A] group-hover:text-white transition-colors">
+                          {score}
+                        </div>
+                        <span className="font-medium">
+                          {score === 1 && "Não Implementado"}
+                          {score === 2 && "Inicial / Manual"}
+                          {score === 3 && "Definido / Consistente"}
+                          {score === 4 && "Gerenciado / Automatizado"}
+                          {score === 5 && "Otimizado / Estratégico"}
+                        </span>
+                      </div>
+                      <ChevronRight size={20} className="text-gray-300 group-hover:text-[#1A1A1A] transition-colors" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => currentQuestionIndex > 0 && setCurrentQuestionIndex(currentQuestionIndex - 1)}
+                disabled={currentQuestionIndex === 0}
+                className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-gray-600 disabled:opacity-0 transition-all"
+              >
+                <ChevronLeft size={16} />
+                Pergunta Anterior
+              </button>
+            </motion.div>
+          )}
+
+          {step === 'loading' && (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center py-20 space-y-8 text-center"
+            >
+              <div className="relative">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="w-20 h-20 border-4 border-gray-200 border-t-[#1A1A1A] rounded-full"
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Activity size={24} className="text-[#1A1A1A]" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold">Analisando Resultados</h3>
+                <p className="text-gray-500">O Gemini está gerando seu roadmap de FinOps personalizado...</p>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 'results' && (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-10"
+            >
+              <div className="p-10 bg-[#1A1A1A] text-white rounded-[2rem] shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                  <BarChart3 size={120} />
+                </div>
+                
+                <div className="relative z-10 space-y-6">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+                    <ClipboardCheck size={14} />
+                    Avaliação Concluída
+                  </div>
+                  
+                  <div className="flex items-baseline gap-4">
+                    <span className="text-8xl font-bold tracking-tighter">{finalScore}</span>
+                    <span className="text-2xl text-gray-400 font-medium">/ 5.0</span>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-bold">Nível de Maturidade: {
+                      finalScore < 2 ? "Crawl (Engatinhar)" :
+                      finalScore < 3.5 ? "Walk (Andar)" : "Run (Correr)"
+                    }</h2>
+                    <p className="text-gray-400 max-w-md">
+                      Sua organização está atualmente na fase <strong>{
+                        finalScore < 2 ? "Crawl" :
+                        finalScore < 3.5 ? "Walk" : "Run"
+                      }</strong> de maturidade FinOps.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[2rem] border border-gray-200 overflow-hidden shadow-sm">
+                <div className="p-8 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                  <div className="flex items-center gap-3 font-bold">
+                    <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center">
+                      <TrendingUp size={18} />
+                    </div>
+                    Recomendações da IA
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isSaving ? (
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <RefreshCcw size={12} className="animate-spin" /> Salvando...
+                      </span>
+                    ) : savedId && (
+                      <span className="text-xs text-emerald-500 font-medium">Salvo no Banco de Dados</span>
+                    )}
+                  </div>
+                </div>
+                <div className="p-8 prose prose-slate max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:text-gray-600 prose-li:text-gray-600">
+                  <Markdown>{report}</Markdown>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={handleStart}
+                  className="flex-1 flex items-center justify-center gap-2 bg-[#1A1A1A] text-white px-8 py-4 rounded-full font-semibold hover:bg-gray-800 transition-all active:scale-95"
+                >
+                  <RefreshCcw size={20} />
+                  Refazer Avaliação
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 px-8 py-4 rounded-full font-semibold hover:bg-gray-50 transition-all active:scale-95"
+                >
+                  <Download size={20} />
+                  Exportar Relatório
+                </button>
+              </div>
+
+              {/* Database Explanation Section */}
+              <div className="mt-12 p-8 bg-blue-50 rounded-[2rem] border border-blue-100 space-y-4">
+                <div className="flex items-center gap-3 font-bold text-blue-900">
+                  <Database size={20} />
+                  Como funciona o Banco de Dados?
+                </div>
+                <div className="text-sm text-blue-800 leading-relaxed space-y-3">
+                  <p>
+                    Para rodar hospedado na <strong>Vercel</strong>, utilizamos o <strong>Firebase Firestore</strong> como banco de dados NoSQL. 
+                    Diferente de um banco de dados tradicional que exigiria um servidor dedicado, o Firebase é <em>Serverless</em>.
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 opacity-80">
+                    <li><strong>Independência:</strong> O banco de dados roda nos servidores do Google, enquanto o site roda na Vercel.</li>
+                    <li><strong>Segurança:</strong> As regras de segurança (Firestore Rules) garantem que apenas dados válidos sejam salvos.</li>
+                    <li><strong>Escalabilidade:</strong> Suporta milhares de usuários sem necessidade de configuração manual de infraestrutura.</li>
+                  </ul>
+                  <p className="font-semibold">
+                    Ao subir para o GitHub e Vercel, você só precisa configurar a variável de ambiente <code>GEMINI_API_KEY</code> no painel da Vercel.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Footer Info */}
+      <footer className="py-10 border-t border-gray-200 text-center">
+        <div className="flex items-center justify-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-widest">
+          <Info size={14} />
+          Powered by Gemini AI & Firebase
+        </div>
+      </footer>
+    </div>
   );
 }

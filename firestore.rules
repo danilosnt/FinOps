@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: assessments
+    // Document ID: auto-generated
+    // Fields:
+    //   - score: number (required, 1-5)
+    //   - answers: map (required)
+    //   - report: string (required, < 10000 chars)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isValidAssessment(data) {
+      return data.keys().hasAll(['score', 'answers', 'report', 'createdAt']) &&
+             data.score is number && data.score >= 1 && data.score <= 5 &&
+             data.answers is map &&
+             data.report is string && data.report.size() < 10000 &&
+             data.createdAt is timestamp;
+    }
+
+    match /assessments/{assessmentId} {
+      // Allow anyone to create an assessment (no auth)
+      allow create: if isValidAssessment(request.resource.data);
+      
+      // Allow anyone to read a specific assessment if they have the ID
+      allow get: if true;
+      
+      // Deny listing all assessments for security (don't want people scraping others' reports)
+      allow list: if false;
+      
+      // No updates or deletes allowed for now
+      allow update, delete: if false;
+    }
+  }
+}

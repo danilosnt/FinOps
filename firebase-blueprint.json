@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "Assessment": {
+      "title": "Assessment",
+      "description": "A FinOps assessment result.",
+      "type": "object",
+      "properties": {
+        "score": {
+          "type": "number",
+          "description": "The overall maturity score (1-5)."
+        },
+        "answers": {
+          "type": "object",
+          "description": "The answers provided for each question."
+        },
+        "report": {
+          "type": "string",
+          "description": "The AI-generated report."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the assessment was completed."
+        }
+      },
+      "required": ["score", "answers", "report", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/assessments/{assessmentId}": {
+      "schema": "Assessment",
+      "description": "Collection of FinOps assessments."
+    }
+  }
+}

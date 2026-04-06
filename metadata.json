@@ -1,5 +1,5 @@
 {
-  "name": "IT Maturity & FinOps Assessment Tool",
-  "description": "Ferramenta para avaliação de maturidade de TI com foco em FinOps, gerando relatórios inteligentes com Gemini AI.",
+  "name": "Ferramenta de Avaliação FinOps",
+  "description": "Uma ferramenta profissional para avaliar a maturidade de FinOps, fornecendo pontuações e relatórios gerados por IA.",
   "requestFramePermissions": []
 }
