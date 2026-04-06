@@ -129,7 +129,7 @@ export default function App() {
             <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center text-white">
               <BarChart3 size={18} />
             </div>
-            <span>Maturidade FinOps</span>
+            <span>FinOps</span>
           </div>
           <div className="flex items-center gap-4 text-sm font-medium text-gray-500">
             <span className="hidden sm:inline">Ferramenta de Avaliação Profissional</span>
