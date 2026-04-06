@@ -2,34 +2,38 @@
   "entities": {
     "Assessment": {
       "title": "Assessment",
-      "description": "A FinOps assessment result.",
+      "description": "TI Maturity Assessment for a company",
       "type": "object",
       "properties": {
-        "score": {
-          "type": "number",
-          "description": "The overall maturity score (1-5)."
+        "company": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "sector": { "type": "string" },
+            "size": { "type": "string" }
+          },
+          "required": ["name", "sector", "size"]
         },
         "answers": {
           "type": "object",
-          "description": "The answers provided for each question."
+          "description": "Map of question IDs to scores (1-5)"
         },
-        "report": {
-          "type": "string",
-          "description": "The AI-generated report."
+        "scores": {
+          "type": "object",
+          "properties": {
+            "overall": { "type": "number" },
+            "segmented": { "type": "object" }
+          }
         },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "When the assessment was completed."
-        }
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["score", "answers", "report", "createdAt"]
+      "required": ["company", "answers", "scores", "createdAt"]
     }
   },
   "firestore": {
-    "/assessments/{assessmentId}": {
+    "assessments": {
       "schema": "Assessment",
-      "description": "Collection of FinOps assessments."
+      "description": "Collection of TI maturity assessments"
     }
   }
 }

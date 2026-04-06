@@ -4,37 +4,29 @@ service cloud.firestore {
     // ===============================================================
     // Assumed Data Model
     // ===============================================================
-    //
     // Collection: assessments
-    // Document ID: auto-generated
     // Fields:
-    //   - score: number (required, 1-5)
-    //   - answers: map (required)
-    //   - report: string (required, < 10000 chars)
-    //   - createdAt: timestamp (required)
-    //
+    //   - company: object { name, sector, size }
+    //   - answers: map { questionId: number }
+    //   - scores: object { overall, segmented }
+    //   - createdAt: timestamp
     // ===============================================================
 
-    // Helper Functions
     function isValidAssessment(data) {
-      return data.keys().hasAll(['score', 'answers', 'report', 'createdAt']) &&
-             data.score is number && data.score >= 1 && data.score <= 5 &&
+      return data.keys().hasAll(['company', 'answers', 'scores', 'createdAt']) &&
+             data.company.keys().hasAll(['name', 'sector', 'size']) &&
+             data.company.name is string && data.company.name.size() > 0 && data.company.name.size() < 100 &&
+             data.company.sector is string &&
+             data.company.size is string &&
              data.answers is map &&
-             data.report is string && data.report.size() < 10000 &&
-             data.createdAt is timestamp;
+             data.scores.overall is number &&
+             data.scores.segmented is map;
     }
 
     match /assessments/{assessmentId} {
-      // Allow anyone to create an assessment (no auth)
+      // Public access as requested (no authentication)
+      allow read: if true;
       allow create: if isValidAssessment(request.resource.data);
-      
-      // Allow anyone to read a specific assessment if they have the ID
-      allow get: if true;
-      
-      // Deny listing all assessments for security (don't want people scraping others' reports)
-      allow list: if false;
-      
-      // No updates or deletes allowed for now
       allow update, delete: if false;
     }
   }

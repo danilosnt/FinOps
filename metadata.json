@@ -1,5 +1,5 @@
 {
-  "name": "Ferramenta de Avaliação FinOps",
-  "description": "Uma ferramenta profissional para avaliar a maturidade de FinOps, fornecendo pontuações e relatórios gerados por IA.",
+  "name": "Avaliação de Maturidade de TI",
+  "description": "Ferramenta para avaliar o grau de maturidade tecnológica de empresas com relatórios gerados por IA.",
   "requestFramePermissions": []
 }
