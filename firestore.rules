@@ -1,33 +1,68 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
     // ===============================================================
-    // Assumed Data Model
+    // Helper Functions
     // ===============================================================
-    // Collection: assessments
-    // Fields:
-    //   - company: object { name, sector, size }
-    //   - answers: map { questionId: number }
-    //   - scores: object { overall, segmented }
-    //   - createdAt: timestamp
-    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email == "daniloddocarmo16@gmail.com");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['admin', 'client'];
+    }
+
+    function isValidCompany(data) {
+      return data.keys().hasAll(['name', 'sector', 'size', 'createdBy']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.sector is string &&
+             data.size in ['Small', 'Medium', 'Large', 'Enterprise'] &&
+             data.createdBy == request.auth.uid;
+    }
 
     function isValidAssessment(data) {
-      return data.keys().hasAll(['company', 'answers', 'scores', 'createdAt']) &&
-             data.company.keys().hasAll(['name', 'sector', 'size']) &&
-             data.company.name is string && data.company.name.size() > 0 && data.company.name.size() < 100 &&
-             data.company.sector is string &&
-             data.company.size is string &&
+      return data.keys().hasAll(['companyId', 'userId', 'answers', 'totalScore', 'averageScore']) &&
+             data.companyId is string &&
+             data.userId == request.auth.uid &&
              data.answers is map &&
-             data.scores.overall is number &&
-             data.scores.segmented is map;
+             data.totalScore is number &&
+             data.averageScore is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role;
+    }
+
+    match /companies/{companyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidCompany(request.resource.data);
+      allow update, delete: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
     }
 
     match /assessments/{assessmentId} {
-      // Public access as requested (no authentication)
-      allow read: if true;
-      allow create: if isValidAssessment(request.resource.data);
-      allow update, delete: if false;
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidAssessment(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidAssessment(request.resource.data);
     }
   }
 }

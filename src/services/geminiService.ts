@@ -1,37 +1,41 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = process.env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-export const generateAnalysis = async (company: any, scores: any) => {
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
+export async function generateFinOpsReport(companyData: any, assessmentData: any) {
+  const prompt = `
+    Você é um especialista em FinOps e Maturidade de TI. 
+    Gere um relatório detalhado de maturidade FinOps para a seguinte empresa:
+    
+    Empresa: ${companyData.name}
+    Setor: ${companyData.sector}
+    Porte: ${companyData.size}
+    
+    Resultados do Questionário:
+    Score Médio: ${assessmentData.averageScore.toFixed(2)} / 5.0
+    Score Total: ${assessmentData.totalScore} / 75
+    
+    Respostas detalhadas (escala 1-5):
+    ${Object.entries(assessmentData.answers).map(([qId, score]) => `- Questão ${qId}: ${score}`).join('\n')}
+    
+    O relatório deve conter:
+    1. Resumo Executivo.
+    2. Análise por categoria (Cultura, Visibilidade, Otimização, Governança, Planejamento).
+    3. Pontos Fortes.
+    4. Áreas de Melhoria.
+    5. Recomendações Práticas (Próximos Passos).
+    
+    Use um tom profissional e consultivo. Formate em Markdown.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Error generating report:", error);
+    return "Não foi possível gerar o relatório no momento. Por favor, tente novamente mais tarde.";
   }
-
-  const ai = new GoogleGenAI({ apiKey });
-  const model = ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `Você é um especialista sênior em Maturidade de TI e Transformação Digital. 
-    Analise os seguintes resultados de uma avaliação de maturidade para a empresa "${company.name}" (Setor: ${company.sector}, Porte: ${company.size}).
-    
-    Scores por Categoria (Escala 1-5):
-    ${Object.entries(scores.segmented).map(([cat, score]) => `- ${cat}: ${score}`).join('\n')}
-    
-    Score Geral: ${scores.overall}
-    
-    Gere um relatório estruturado em Português (Markdown) com:
-    1. **Resumo Executivo**: Uma visão geral do estado atual.
-    2. **Análise por Pilar**: Comentários sobre os pontos fortes e fracos em cada categoria.
-    3. **Gaps Críticos**: Identifique o que mais está impedindo a empresa de evoluir.
-    4. **Plano de Ação (Roadmap)**: 3 a 5 recomendações práticas e imediatas para aumentar o score de maturidade.
-    
-    Use um tom profissional, consultivo e encorajador.`,
-  });
-
-  const response = await model;
-  return response.text;
-};
+}

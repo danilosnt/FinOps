@@ -1,455 +1,390 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState } from 'react';
+import { FINOPS_QUESTIONS } from './constants/questions';
+import { generateFinOpsReport } from './services/geminiService';
+import ReactMarkdown from 'react-markdown';
 import { 
-  Shield, 
-  Settings, 
-  Cloud, 
-  Database, 
-  Zap, 
-  ArrowRight, 
-  CheckCircle2, 
-  BarChart3, 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardFooter, 
+  CardHeader, 
+  CardTitle 
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { 
+  ClipboardCheck, 
+  FileText, 
+  Building2, 
   ChevronRight, 
   ChevronLeft,
+  CheckCircle2,
+  AlertCircle,
   Loader2,
-  FileText,
-  History,
-  Info
+  TrendingUp
 } from 'lucide-react';
-import { QUESTIONS, CATEGORIES, MATURITY_LEVELS, type Company } from './types';
-import { calculateScores, cn } from './lib/utils';
-import { saveAssessment, getRecentAssessments } from './firebase';
-import { generateAnalysis } from './services/geminiService';
-import Markdown from 'react-markdown';
+import { motion, AnimatePresence } from 'motion/react';
 
-// --- Components ---
+type Step = 'company' | 'questionnaire' | 'result';
 
-const Header = () => (
-  <header className="border-b border-gray-100 bg-white/80 backdrop-blur-md sticky top-0 z-50">
-    <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <div className="bg-indigo-600 p-1.5 rounded-lg">
-          <Shield className="w-5 h-5 text-white" />
-        </div>
-        <span className="font-bold text-xl tracking-tight text-gray-900">Maturidade TI</span>
-      </div>
-      <div className="text-xs font-mono text-gray-400 uppercase tracking-widest hidden sm:block">
-        Assessment Tool v2.0
-      </div>
-    </div>
-  </header>
-);
-
-const StepIndicator = ({ currentStep }: { currentStep: number }) => {
-  const steps = ["Empresa", "Avaliação", "Relatório"];
-  return (
-    <div className="flex items-center justify-center gap-4 mb-12">
-      {steps.map((step, idx) => (
-        <div key={step} className="flex items-center gap-2">
-          <div className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
-            currentStep > idx ? "bg-green-100 text-green-600" : 
-            currentStep === idx ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" : 
-            "bg-gray-100 text-gray-400"
-          )}>
-            {currentStep > idx ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}
-          </div>
-          <span className={cn(
-            "text-sm font-medium hidden sm:block",
-            currentStep === idx ? "text-indigo-600" : "text-gray-400"
-          )}>
-            {step}
-          </span>
-          {idx < steps.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300" />}
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// --- Main App ---
-
-export default function App() {
-  const [step, setStep] = useState(0); // 0: Home/Company, 1: Questions, 2: Report
-  const [company, setCompany] = useState<Company>({ name: '', sector: '', size: '' });
+function MainApp() {
+  const [step, setStep] = useState<Step>('company');
+  const [company, setCompany] = useState({ name: '', sector: '', size: '' });
   const [answers, setAnswers] = useState<Record<string, number>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [analysis, setAnalysis] = useState<string | null>(null);
-  const [recentAssessments, setRecentAssessments] = useState<any[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [assessmentResult, setAssessmentResult] = useState<any>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [report, setReport] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      const data = await getRecentAssessments(10);
-      if (data) setRecentAssessments(data);
-    };
-    fetchHistory();
-  }, []);
-
-  const handleStart = (e: React.FormEvent) => {
+  const handleCompanySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (company.name && company.sector && company.size) {
-      setStep(1);
+      setStep('questionnaire');
     }
   };
 
-  const handleAnswer = (qId: string, score: number) => {
-    setAnswers(prev => ({ ...prev, [qId]: score }));
-  };
-
-  const isComplete = Object.keys(answers).length === QUESTIONS.length;
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    const scores = calculateScores(answers);
-    const assessmentData = { company, answers, scores };
+  const handleAnswer = (score: number) => {
+    const questionId = FINOPS_QUESTIONS[currentQuestionIndex].id;
+    setAnswers(prev => ({ ...prev, [questionId]: score }));
     
-    try {
-      await saveAssessment(assessmentData);
-      const aiAnalysis = await generateAnalysis(company, scores);
-      setAnalysis(aiAnalysis);
-      setStep(2);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSubmitting(false);
+    if (currentQuestionIndex < FINOPS_QUESTIONS.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      calculateResult();
     }
   };
 
-  const reset = () => {
-    setStep(0);
-    setCompany({ name: '', sector: '', size: '' });
-    setAnswers({});
-    setAnalysis(null);
+  const calculateResult = () => {
+    const totalScore = Object.values(answers).reduce((a, b) => a + b, 0);
+    const averageScore = totalScore / FINOPS_QUESTIONS.length;
+    
+    const result = {
+      answers,
+      totalScore,
+      averageScore,
+      createdAt: new Date().toISOString(),
+    };
+
+    setAssessmentResult(result);
+    setStep('result');
+  };
+
+  const handleGenerateReport = async () => {
+    setGeneratingReport(true);
+    const generatedReport = await generateFinOpsReport(company, assessmentResult);
+    setReport(generatedReport ?? null);
+    setGeneratingReport(false);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-indigo-100 selection:text-indigo-900">
-      <Header />
-      
-      <main className="max-w-5xl mx-auto px-4 py-12">
+    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-zinc-900 selection:text-zinc-50">
+      {/* Header */}
+      <header className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+            <span className="text-lg font-semibold tracking-tight">FinOps Maturity</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
         <AnimatePresence mode="wait">
-          {step === 0 && (
-            <motion.div 
-              key="home"
+          {step === 'company' && (
+            <motion.div
+              key="company"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="max-w-2xl mx-auto"
             >
-              <div className="text-center mb-12">
-                <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 sm:text-5xl mb-4">
-                  Avalie a Maturidade de TI da sua Empresa
-                </h1>
-                <p className="text-lg text-gray-600 max-w-lg mx-auto">
-                  Descubra o grau de evolução tecnológica do seu negócio e receba um relatório detalhado gerado por IA.
-                </p>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 p-8">
-                <form onSubmit={handleStart} className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nome da Empresa</label>
-                    <input 
-                      type="text" 
-                      required
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
-                      placeholder="Ex: Tech Solutions Ltda"
-                      value={company.name}
-                      onChange={e => setCompany({...company, name: e.target.value})}
-                    />
+              <Card className="border-zinc-200 shadow-xl shadow-zinc-200/50">
+                <CardHeader>
+                  <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                    <Building2 className="h-4 w-4" />
+                    <span className="text-xs font-semibold uppercase tracking-widest">Passo 1 de 3</span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Setor</label>
-                      <select 
+                  <CardTitle className="text-3xl font-bold tracking-tight">Cadastro da Empresa</CardTitle>
+                  <CardDescription>Conte-nos um pouco sobre a empresa que será avaliada.</CardDescription>
+                </CardHeader>
+                <form onSubmit={handleCompanySubmit}>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Nome da Empresa</Label>
+                      <Input 
+                        id="name" 
+                        placeholder="Ex: Tech Solutions Ltda" 
+                        value={company.name}
+                        onChange={(e) => setCompany(prev => ({ ...prev, name: e.target.value }))}
                         required
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
-                        value={company.sector}
-                        onChange={e => setCompany({...company, sector: e.target.value})}
-                      >
-                        <option value="">Selecione...</option>
-                        <option value="Tecnologia">Tecnologia</option>
-                        <option value="Varejo">Varejo</option>
-                        <option value="Indústria">Indústria</option>
-                        <option value="Saúde">Saúde</option>
-                        <option value="Educação">Educação</option>
-                        <option value="Finanças">Finanças</option>
-                        <option value="Serviços">Serviços</option>
-                      </select>
+                        className="h-11 border-zinc-200 focus:ring-zinc-900"
+                      />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Porte</label>
-                      <select 
-                        required
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
-                        value={company.size}
-                        onChange={e => setCompany({...company, size: e.target.value})}
-                      >
-                        <option value="">Selecione...</option>
-                        <option value="Micro (até 10 func.)">Micro (até 10 func.)</option>
-                        <option value="Pequena (11-50 func.)">Pequena (11-50 func.)</option>
-                        <option value="Média (51-250 func.)">Média (51-250 func.)</option>
-                        <option value="Grande (+250 func.)">Grande (+250 func.)</option>
-                      </select>
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="sector">Setor de Atuação</Label>
+                        <Input 
+                          id="sector" 
+                          placeholder="Ex: Tecnologia, Varejo, Saúde" 
+                          value={company.sector}
+                          onChange={(e) => setCompany(prev => ({ ...prev, sector: e.target.value }))}
+                          required
+                          className="h-11 border-zinc-200 focus:ring-zinc-900"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="size">Porte da Empresa</Label>
+                        <Select 
+                          value={company.size} 
+                          onValueChange={(value) => setCompany(prev => ({ ...prev, size: value ?? '' }))}
+                          required
+                        >
+                          <SelectTrigger className="h-11 min-w-[350px] border-zinc-200 focus:ring-zinc-900">
+                            <SelectValue placeholder="Selecione o porte" />
+                          </SelectTrigger>
+                          <SelectContent className="min-w-[300px]">
+                            <SelectItem value="Small">Pequena (até 50 funcionários)</SelectItem>
+                            <SelectItem value="Medium">Média (51-250 funcionários)</SelectItem>
+                            <SelectItem value="Large">Grande (251-1000 funcionários)</SelectItem>
+                            <SelectItem value="Enterprise">Corporativa (+1000 funcionários)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  </div>
-                  <button 
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
-                  >
-                    Começar Avaliação <ArrowRight className="w-5 h-5" />
-                  </button>
+                  </CardContent>
+                  <CardFooter className="flex justify-end pt-6">
+                    <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 text-white h-11 px-8">
+                      Iniciar Questionário
+                      <ChevronRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </CardFooter>
                 </form>
-              </div>
-
-              {recentAssessments.length > 0 && (
-                <div className="mt-12">
-                  <button 
-                    onClick={() => setShowHistory(!showHistory)}
-                    className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition-colors mx-auto text-sm font-medium"
-                  >
-                    <History className="w-4 h-4" /> 
-                    {showHistory ? "Ocultar Histórico" : "Ver Avaliações Recentes"}
-                  </button>
-                  
-                  {showHistory && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="mt-6 space-y-3"
-                    >
-                      {recentAssessments.map((item: any) => (
-                        <div key={item.id} className="bg-white p-4 rounded-xl border border-gray-100 flex items-center justify-between">
-                          <div>
-                            <p className="font-bold text-gray-800">{item.company.name}</p>
-                            <p className="text-xs text-gray-400">{item.company.sector} • {item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleDateString('pt-BR') : 'Recente'}</p>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-xs text-gray-400 uppercase font-mono">Score</span>
-                            <p className="text-lg font-black text-indigo-600">{item.scores.overall}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </div>
-              )}
+              </Card>
             </motion.div>
           )}
 
-          {step === 1 && (
-            <motion.div 
-              key="questions"
+          {step === 'questionnaire' && (
+            <motion.div
+              key="questionnaire"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="max-w-3xl mx-auto"
             >
-              <StepIndicator currentStep={1} />
-              
-              <div className="space-y-12">
-                {CATEGORIES.map(category => (
-                  <section key={category} className="space-y-6">
-                    <div className="flex items-center gap-3 pb-2 border-b border-gray-200">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                        {category === "Governança e Estratégia" && <Settings className="w-5 h-5" />}
-                        {category === "Infraestrutura e Nuvem" && <Cloud className="w-5 h-5" />}
-                        {category === "Segurança e Conformidade" && <Shield className="w-5 h-5" />}
-                        {category === "Processos e Operações" && <Database className="w-5 h-5" />}
-                        {category === "Inovação e Dados" && <Zap className="w-5 h-5" />}
-                      </div>
-                      <h2 className="text-xl font-bold text-gray-800">{category}</h2>
-                    </div>
-                    
-                    <div className="grid gap-6">
-                      {QUESTIONS.filter(q => q.category === category).map(q => (
-                        <div key={q.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="mb-4">
-                            <h3 className="font-bold text-gray-900 mb-1">{q.text}</h3>
-                            <p className="text-sm text-gray-500">{q.description}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {[1, 2, 3, 4, 5].map(score => (
-                              <button
-                                key={score}
-                                onClick={() => handleAnswer(q.id, score)}
-                                className={cn(
-                                  "flex-1 min-w-[60px] py-3 rounded-xl text-sm font-bold transition-all border-2",
-                                  answers[q.id] === score 
-                                    ? "bg-indigo-600 border-indigo-600 text-white scale-105" 
-                                    : "bg-white border-gray-100 text-gray-400 hover:border-indigo-200 hover:text-indigo-600"
-                                )}
-                              >
-                                {score}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ))}
+              <div className="mb-8 flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-zinc-500">
+                    <ClipboardCheck className="h-4 w-4" />
+                    <span className="text-xs font-semibold uppercase tracking-widest">Passo 2 de 3</span>
+                  </div>
+                  <h2 className="text-2xl font-bold tracking-tight">Avaliação FinOps</h2>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-medium text-zinc-500">Progresso</span>
+                  <div className="mt-1 h-2 w-48 overflow-hidden rounded-full bg-zinc-200">
+                    <motion.div 
+                      className="h-full bg-zinc-900"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${((currentQuestionIndex + 1) / FINOPS_QUESTIONS.length) * 100}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-400">{currentQuestionIndex + 1} de {FINOPS_QUESTIONS.length}</p>
+                </div>
               </div>
 
-              <div className="mt-12 flex items-center justify-between bg-white p-6 rounded-2xl border border-gray-100 sticky bottom-6 shadow-2xl shadow-indigo-100/50">
-                <div className="text-sm text-gray-500">
-                  <span className="font-bold text-indigo-600">{Object.keys(answers).length}</span> de {QUESTIONS.length} respondidas
+              <Card className="border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden">
+                <div className="bg-zinc-900 px-6 py-3">
+                  <Badge variant="outline" className="text-white border-white/20 uppercase tracking-wider text-[10px]">
+                    {FINOPS_QUESTIONS[currentQuestionIndex].category}
+                  </Badge>
                 </div>
-                <button
-                  disabled={!isComplete || isSubmitting}
-                  onClick={handleSubmit}
-                  className={cn(
-                    "px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2",
-                    isComplete && !isSubmitting
-                      ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  )}
-                >
-                  {isSubmitting ? (
-                    <>Processando... <Loader2 className="w-5 h-5 animate-spin" /></>
-                  ) : (
-                    <>Gerar Relatório <ArrowRight className="w-5 h-5" /></>
-                  )}
-                </button>
-              </div>
+                <CardContent className="p-8 sm:p-12">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentQuestionIndex}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="space-y-8"
+                    >
+                      <h3 className="text-2xl font-medium leading-tight text-zinc-900 sm:text-3xl">
+                        {FINOPS_QUESTIONS[currentQuestionIndex].text}
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                        {[1, 2, 3, 4, 5].map((score) => (
+                          <Button
+                            key={score}
+                            variant="outline"
+                            onClick={() => handleAnswer(score)}
+                            className="h-20 flex-col gap-1 border-zinc-200 hover:border-zinc-900 hover:bg-zinc-50 transition-all group"
+                          >
+                            <span className="text-xl font-bold group-hover:scale-110 transition-transform">{score}</span>
+                            <span className="text-[10px] uppercase tracking-tighter text-zinc-400 group-hover:text-zinc-900">
+                              {score === 1 ? 'Discordo' : score === 5 ? 'Concordo' : ''}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+                </CardContent>
+                <CardFooter className="bg-zinc-50 border-t border-zinc-100 px-8 py-4 flex justify-between">
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+                    disabled={currentQuestionIndex === 0}
+                    className="text-zinc-500"
+                  >
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Anterior
+                  </Button>
+                  <p className="text-xs text-zinc-400 italic">Responda de 1 (Mínimo) a 5 (Máximo)</p>
+                </CardFooter>
+              </Card>
             </motion.div>
           )}
 
-          {step === 2 && analysis && (
-            <motion.div 
-              key="report"
+          {step === 'result' && (
+            <motion.div
+              key="result"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="max-w-4xl mx-auto"
+              className="space-y-8"
             >
-              <div className="flex items-center justify-between mb-8">
-                <button onClick={reset} className="text-gray-500 hover:text-indigo-600 flex items-center gap-1 text-sm font-medium">
-                  <ChevronLeft className="w-4 h-4" /> Nova Avaliação
-                </button>
-                <div className="flex gap-2">
-                  <button onClick={() => window.print()} className="p-2 rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50">
-                    <FileText className="w-5 h-5" />
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 text-zinc-500">
+                <FileText className="h-4 w-4" />
+                <span className="text-xs font-semibold uppercase tracking-widest">Passo 3 de 3</span>
               </div>
 
-              <div className="bg-white rounded-3xl shadow-2xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
-                {/* Report Header */}
-                <div className="bg-indigo-600 p-8 sm:p-12 text-white relative overflow-hidden">
-                  <div className="relative z-10">
-                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
-                      <div>
-                        <span className="text-indigo-200 text-xs font-mono uppercase tracking-widest mb-2 block">Relatório de Maturidade</span>
-                        <h2 className="text-3xl sm:text-4xl font-black mb-2">{company.name}</h2>
-                        <p className="text-indigo-100 opacity-80">{company.sector} • {company.size}</p>
+              <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+                <Card className="lg:col-span-1 border-zinc-200 shadow-xl shadow-zinc-200/50">
+                  <CardHeader className="text-center">
+                    <CardTitle className="text-lg font-semibold">Score de Maturidade</CardTitle>
+                    <CardDescription>Baseado em 15 indicadores</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col items-center justify-center pb-8">
+                    <div className="relative flex h-40 w-40 items-center justify-center rounded-full border-8 border-zinc-100">
+                      <div className="text-center">
+                        <span className="text-5xl font-black text-zinc-900">{assessmentResult.averageScore.toFixed(1)}</span>
+                        <p className="text-xs font-medium text-zinc-400 uppercase tracking-widest">de 5.0</p>
                       </div>
-                      <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 text-center min-w-[140px]">
-                        <span className="text-[10px] uppercase tracking-widest opacity-70 block mb-1">Score Geral</span>
-                        <div className="text-5xl font-black">{calculateScores(answers).overall}</div>
-                        <span className="text-[10px] opacity-70">Escala 1-5</span>
+                      <svg className="absolute -rotate-90 h-full w-full" viewBox="0 0 160 160">
+                        <circle
+                          cx="80"
+                          cy="80"
+                          r="72"
+                          fill="transparent"
+                          stroke="currentColor"
+                          strokeWidth="8"
+                          strokeDasharray={2 * Math.PI * 72}
+                          strokeDashoffset={2 * Math.PI * 72 * (1 - assessmentResult.averageScore / 5)}
+                          strokeLinecap="round"
+                          className="text-zinc-900"
+                        />
+                      </svg>
+                    </div>
+                    <div className="mt-8 w-full space-y-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-zinc-500">Pontuação Total</span>
+                        <span className="font-bold">{assessmentResult.totalScore} / 75</span>
+                      </div>
+                      <Separator className="bg-zinc-100" />
+                      <div className="flex justify-between text-sm">
+                        <span className="text-zinc-500">Nível Estimado</span>
+                        <Badge className="bg-zinc-900 text-white">
+                          {assessmentResult.averageScore < 2 ? 'Iniciante' : 
+                           assessmentResult.averageScore < 3.5 ? 'Intermediário' : 'Avançado'}
+                        </Badge>
                       </div>
                     </div>
-                  </div>
-                  {/* Decorative circles */}
-                  <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/5 rounded-full blur-3xl" />
-                  <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-indigo-400/20 rounded-full blur-3xl" />
-                </div>
+                  </CardContent>
+                  <CardFooter>
+                    {!report && (
+                      <Button 
+                        onClick={handleGenerateReport} 
+                        disabled={generatingReport}
+                        className="w-full bg-zinc-900 hover:bg-zinc-800 text-white h-11"
+                      >
+                        {generatingReport ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Analisando com Gemini...
+                          </>
+                        ) : (
+                          <>
+                            Gerar Relatório Detalhado
+                            <ChevronRight className="ml-2 h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </CardFooter>
+                </Card>
 
-                {/* Score Breakdown */}
-                <div className="p-8 sm:p-12 border-b border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-800 mb-8 flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-indigo-600" /> Desempenho por Pilar
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Object.entries(calculateScores(answers).segmented).map(([cat, score]) => (
-                      <div key={cat} className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-2">{cat}</p>
-                        <div className="flex items-end justify-between">
-                          <span className="text-3xl font-black text-gray-800">{score}</span>
-                          <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-indigo-600 rounded-full" 
-                              style={{ width: `${(score / 5) * 100}%` }}
-                            />
-                          </div>
+                <Card className="lg:col-span-2 border-zinc-200 shadow-xl shadow-zinc-200/50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-zinc-900" />
+                      Relatório de Diagnóstico
+                    </CardTitle>
+                    <CardDescription>Análise gerada por IA sobre sua maturidade FinOps</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[500px] pr-4">
+                      {report ? (
+                        <div className="prose prose-zinc max-w-none prose-headings:tracking-tight prose-p:text-zinc-600">
+                          <ReactMarkdown>{report}</ReactMarkdown>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* AI Analysis */}
-                <div className="p-8 sm:p-12 bg-gray-50/30">
-                  <div className="flex items-center gap-2 mb-8">
-                    <div className="bg-indigo-100 p-2 rounded-lg">
-                      <Zap className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <h3 className="text-lg font-bold text-gray-800">Análise Estratégica (Gemini AI)</h3>
-                  </div>
-                  <div className="prose prose-indigo max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-600 prose-li:text-gray-600">
-                    <Markdown>{analysis}</Markdown>
-                  </div>
-                </div>
-
-                {/* Maturity Levels Guide */}
-                <div className="p-8 sm:p-12 bg-white border-t border-gray-100">
-                  <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-                    <Info className="w-5 h-5 text-indigo-600" /> Guia de Níveis de Maturidade
-                  </h3>
-                  <div className="grid gap-4">
-                    {MATURITY_LEVELS.map(lvl => (
-                      <div key={lvl.level} className={cn(
-                        "p-4 rounded-xl border transition-all",
-                        Math.round(calculateScores(answers).overall) === lvl.level
-                          ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200"
-                          : "bg-white border-gray-100 opacity-60"
-                      )}>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl font-black text-indigo-600">0{lvl.level}</span>
-                          <div>
-                            <h4 className="font-bold text-gray-900">{lvl.name}</h4>
-                            <p className="text-xs text-gray-500">{lvl.description}</p>
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center text-center py-20">
+                          <div className="h-12 w-12 rounded-full bg-zinc-50 flex items-center justify-center mb-4">
+                            <AlertCircle className="h-6 w-6 text-zinc-300" />
                           </div>
-                          {Math.round(calculateScores(answers).overall) === lvl.level && (
-                            <div className="ml-auto bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-tighter">
-                              Seu Nível
-                            </div>
-                          )}
+                          <p className="text-sm text-zinc-500 max-w-xs">
+                            Clique no botão ao lado para gerar uma análise profunda baseada em seus resultados.
+                          </p>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
               </div>
-
-              <div className="mt-12 text-center text-gray-400 text-xs">
-                Este relatório foi gerado automaticamente e deve ser usado como guia consultivo.
+              
+              <div className="flex justify-center pb-12">
+                <Button variant="ghost" onClick={() => window.location.reload()} className="text-zinc-400 hover:text-zinc-900">
+                  Realizar Nova Avaliação
+                </Button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
-      {/* Footer */}
-      <footer className="py-12 border-t border-gray-100 mt-12">
-        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2 opacity-50">
-            <Shield className="w-4 h-4" />
-            <span className="text-sm font-bold">Maturidade TI</span>
-          </div>
-          <p className="text-xs text-gray-400">© 2026 Assessment Tool. Desenvolvido para fins de consultoria tecnológica.</p>
-          <div className="flex gap-4">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[10px] uppercase tracking-widest text-gray-400 font-mono">System Online</span>
-          </div>
+      <footer className="border-t border-zinc-200 bg-white py-8">
+        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
+          <p className="text-xs text-zinc-400 uppercase tracking-widest">
+            &copy; 2026 FinOps Maturity Evaluator
+          </p>
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <MainApp />
   );
 }

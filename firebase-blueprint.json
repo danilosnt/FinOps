@@ -1,39 +1,58 @@
 {
   "entities": {
-    "Assessment": {
-      "title": "Assessment",
-      "description": "TI Maturity Assessment for a company",
+    "User": {
+      "title": "User",
+      "description": "Application user profile",
       "type": "object",
       "properties": {
-        "company": {
-          "type": "object",
-          "properties": {
-            "name": { "type": "string" },
-            "sector": { "type": "string" },
-            "size": { "type": "string" }
-          },
-          "required": ["name", "sector", "size"]
-        },
-        "answers": {
-          "type": "object",
-          "description": "Map of question IDs to scores (1-5)"
-        },
-        "scores": {
-          "type": "object",
-          "properties": {
-            "overall": { "type": "number" },
-            "segmented": { "type": "object" }
-          }
-        },
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "client"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["company", "answers", "scores", "createdAt"]
+      "required": ["uid", "email", "role"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Client company information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "sector": { "type": "string" },
+        "size": { "type": "string", "enum": ["Small", "Medium", "Large", "Enterprise"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "sector", "size", "createdBy"]
+    },
+    "Assessment": {
+      "title": "Assessment",
+      "description": "FinOps maturity assessment result",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "answers": { "type": "object" },
+        "totalScore": { "type": "number" },
+        "averageScore": { "type": "number" },
+        "report": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "userId", "answers", "totalScore", "averageScore"]
     }
   },
   "firestore": {
-    "assessments": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Registered companies"
+    },
+    "/assessments/{assessmentId}": {
       "schema": "Assessment",
-      "description": "Collection of TI maturity assessments"
+      "description": "Assessment results"
     }
   }
 }

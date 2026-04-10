@@ -1,5 +1,5 @@
 {
-  "name": "Avaliação de Maturidade de TI",
-  "description": "Ferramenta para avaliar o grau de maturidade tecnológica de empresas com relatórios gerados por IA.",
+  "name": "FinOps Maturity Evaluator",
+  "description": "Evaluate your company's IT and FinOps maturity with a structured questionnaire and AI-generated reports. No login required.",
   "requestFramePermissions": []
 }
