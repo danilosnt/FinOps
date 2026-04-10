@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FINOPS_QUESTIONS } from './constants/questions';
 import { generateFinOpsReport } from './services/geminiService';
 import ReactMarkdown from 'react-markdown';
+import { jsPDF } from 'jspdf';
 import { 
   Card, 
   CardContent, 
@@ -32,7 +33,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  TrendingUp
+  TrendingUp,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -83,12 +85,35 @@ function MainApp() {
   const handleGenerateReport = async () => {
     setGeneratingReport(true);
     const generatedReport = await generateFinOpsReport(company, assessmentResult);
-    setReport(generatedReport ?? null);
+    setReport(generatedReport);
     setGeneratingReport(false);
   };
 
+  const exportToPDF = () => {
+    if (!report) return;
+    
+    const doc = new jsPDF();
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const title = `Relatório de Maturidade FinOps - ${company.name}`;
+    
+    doc.setFontSize(18);
+    doc.text(title, margin, 20);
+    
+    doc.setFontSize(12);
+    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, margin, 30);
+    doc.text(`Score: ${assessmentResult.averageScore.toFixed(1)} / 5.0`, margin, 37);
+    doc.line(margin, 42, pageWidth - margin, 42);
+    
+    doc.setFontSize(10);
+    const splitText = doc.splitTextToSize(report.replace(/#/g, '').replace(/\*/g, ''), pageWidth - (margin * 2));
+    doc.text(splitText, margin, 50);
+    
+    doc.save(`Relatorio_FinOps_${company.name.replace(/\s+/g, '_')}.pdf`);
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-50 text-zinc-900 font-sans selection:bg-zinc-900 selection:text-zinc-50">
+    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-zinc-900 selection:text-zinc-50">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -101,7 +126,7 @@ function MainApp() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
         <AnimatePresence mode="wait">
           {step === 'company' && (
             <motion.div
@@ -109,8 +134,9 @@ function MainApp() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              className="flex justify-center"
             >
-              <Card className="border-zinc-200 shadow-xl shadow-zinc-200/50">
+              <Card className="w-full max-w-2xl border-zinc-200 shadow-xl shadow-zinc-200/50">
                 <CardHeader>
                   <div className="flex items-center gap-2 text-zinc-500 mb-2">
                     <Building2 className="h-4 w-4" />
@@ -129,7 +155,7 @@ function MainApp() {
                         value={company.name}
                         onChange={(e) => setCompany(prev => ({ ...prev, name: e.target.value }))}
                         required
-                        className="h-11 border-zinc-200 focus:ring-zinc-900"
+                        className="h-12 border-zinc-200 focus:ring-zinc-900"
                       />
                     </div>
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -141,20 +167,20 @@ function MainApp() {
                           value={company.sector}
                           onChange={(e) => setCompany(prev => ({ ...prev, sector: e.target.value }))}
                           required
-                          className="h-11 border-zinc-200 focus:ring-zinc-900"
+                          className="h-12 border-zinc-200 focus:ring-zinc-900"
                         />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="size">Porte da Empresa</Label>
                         <Select 
                           value={company.size} 
-                          onValueChange={(value) => setCompany(prev => ({ ...prev, size: value ?? '' }))}
+                          onValueChange={(value) => setCompany(prev => ({ ...prev, size: value }))}
                           required
                         >
-                          <SelectTrigger className="h-11 min-w-[350px] border-zinc-200 focus:ring-zinc-900">
+                          <SelectTrigger className="h-12 border-zinc-200 focus:ring-zinc-900">
                             <SelectValue placeholder="Selecione o porte" />
                           </SelectTrigger>
-                          <SelectContent className="min-w-[300px]">
+                          <SelectContent>
                             <SelectItem value="Small">Pequena (até 50 funcionários)</SelectItem>
                             <SelectItem value="Medium">Média (51-250 funcionários)</SelectItem>
                             <SelectItem value="Large">Grande (251-1000 funcionários)</SelectItem>
@@ -165,9 +191,9 @@ function MainApp() {
                     </div>
                   </CardContent>
                   <CardFooter className="flex justify-end pt-6">
-                    <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 text-white h-11 px-8">
+                    <Button type="submit" className="bg-zinc-900 hover:bg-zinc-800 text-white h-12 px-10 text-base font-medium">
                       Iniciar Questionário
-                      <ChevronRight className="ml-2 h-4 w-4" />
+                      <ChevronRight className="ml-2 h-5 w-5" />
                     </Button>
                   </CardFooter>
                 </form>
@@ -275,12 +301,13 @@ function MainApp() {
                     <CardDescription>Baseado em 15 indicadores</CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-col items-center justify-center pb-8">
-                    <div className="relative flex h-40 w-40 items-center justify-center rounded-full border-8 border-zinc-100">
-                      <div className="text-center">
+                    <div className="relative flex h-40 w-40 items-center justify-center">
+                      <div className="text-center z-10">
                         <span className="text-5xl font-black text-zinc-900">{assessmentResult.averageScore.toFixed(1)}</span>
                         <p className="text-xs font-medium text-zinc-400 uppercase tracking-widest">de 5.0</p>
                       </div>
-                      <svg className="absolute -rotate-90 h-full w-full" viewBox="0 0 160 160">
+                      <svg className="absolute inset-0 -rotate-90 h-full w-full">
+                        {/* Background Circle */}
                         <circle
                           cx="80"
                           cy="80"
@@ -288,10 +315,20 @@ function MainApp() {
                           fill="transparent"
                           stroke="currentColor"
                           strokeWidth="8"
-                          strokeDasharray={2 * Math.PI * 72}
-                          strokeDashoffset={2 * Math.PI * 72 * (1 - assessmentResult.averageScore / 5)}
+                          className="text-zinc-100"
+                        />
+                        {/* Progress Circle */}
+                        <circle
+                          cx="80"
+                          cy="80"
+                          r="72"
+                          fill="transparent"
+                          stroke="currentColor"
+                          strokeWidth="8"
+                          strokeDasharray={452.39}
+                          strokeDashoffset={452.39 - (452.39 * assessmentResult.averageScore) / 5}
                           strokeLinecap="round"
-                          className="text-zinc-900"
+                          className="text-zinc-900 transition-all duration-1000 ease-out"
                         />
                       </svg>
                     </div>
@@ -344,7 +381,7 @@ function MainApp() {
                   <CardContent>
                     <ScrollArea className="h-[500px] pr-4">
                       {report ? (
-                        <div className="prose prose-zinc max-w-none prose-headings:tracking-tight prose-p:text-zinc-600">
+                        <div id="report-content" className="prose prose-zinc max-w-none prose-headings:tracking-tight prose-p:text-zinc-600">
                           <ReactMarkdown>{report}</ReactMarkdown>
                         </div>
                       ) : (
@@ -359,6 +396,15 @@ function MainApp() {
                       )}
                     </ScrollArea>
                   </CardContent>
+                  {report && (
+                    <CardFooter className="border-t border-zinc-100 pt-4 flex justify-between">
+                      <p className="text-[10px] text-zinc-400 uppercase tracking-widest">Gerado por Google Gemini</p>
+                      <Button variant="outline" onClick={exportToPDF} className="border-zinc-200 hover:bg-zinc-50">
+                        <Download className="mr-2 h-4 w-4" />
+                        Exportar Relatório (PDF)
+                      </Button>
+                    </CardFooter>
+                  )}
                 </Card>
               </div>
               
@@ -375,7 +421,7 @@ function MainApp() {
       <footer className="border-t border-zinc-200 bg-white py-8">
         <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
           <p className="text-xs text-zinc-400 uppercase tracking-widest">
-            &copy; 2026 FinOps Maturity Evaluator
+            &copy; 2026 FinOps Maturity Evaluator • Powered by Google Gemini
           </p>
         </div>
       </footer>
