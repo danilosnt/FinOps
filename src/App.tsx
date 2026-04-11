@@ -177,10 +177,10 @@ function MainApp() {
                           onValueChange={(value) => setCompany(prev => ({ ...prev, size: value ?? '' }))}
                           required
                         >
-                          <SelectTrigger className="h-12 border-zinc-200 focus:ring-zinc-900">
+                          <SelectTrigger className="h-12 w-full border-zinc-200 focus:ring-zinc-900">
                             <SelectValue placeholder="Selecione o porte" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="w-[var(--radix-select-trigger-width)] min-w-[300px]">
                             <SelectItem value="Small">Pequena (até 50 funcionários)</SelectItem>
                             <SelectItem value="Medium">Média (51-250 funcionários)</SelectItem>
                             <SelectItem value="Large">Grande (251-1000 funcionários)</SelectItem>
