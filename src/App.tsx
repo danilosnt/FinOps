@@ -85,7 +85,7 @@ function MainApp() {
   const handleGenerateReport = async () => {
     setGeneratingReport(true);
     const generatedReport = await generateFinOpsReport(company, assessmentResult);
-    setReport(generatedReport);
+    setReport(generatedReport ?? null);
     setGeneratingReport(false);
   };
 
@@ -113,7 +113,7 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-zinc-900 selection:text-zinc-50">
+    <div className="min-h-screen flex flex-col bg-zinc-50 text-zinc-900 font-sans selection:bg-zinc-900 selection:text-zinc-50">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -126,7 +126,7 @@ function MainApp() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-6 lg:px-8">
         <AnimatePresence mode="wait">
           {step === 'company' && (
             <motion.div
@@ -174,7 +174,7 @@ function MainApp() {
                         <Label htmlFor="size">Porte da Empresa</Label>
                         <Select 
                           value={company.size} 
-                          onValueChange={(value) => setCompany(prev => ({ ...prev, size: value }))}
+                          onValueChange={(value) => setCompany(prev => ({ ...prev, size: value ?? '' }))}
                           required
                         >
                           <SelectTrigger className="h-12 border-zinc-200 focus:ring-zinc-900">
