@@ -58,21 +58,23 @@ function MainApp() {
 
   const handleAnswer = (score: number) => {
     const questionId = FINOPS_QUESTIONS[currentQuestionIndex].id;
-    setAnswers(prev => ({ ...prev, [questionId]: score }));
+    const updatedAnswers = { ...answers, [questionId]: score };
+    setAnswers(updatedAnswers);
     
     if (currentQuestionIndex < FINOPS_QUESTIONS.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      calculateResult();
+      // Pass updatedAnswers directly to avoid stale state from async setState
+      calculateResult(updatedAnswers);
     }
   };
 
-  const calculateResult = () => {
-    const totalScore = Object.values(answers).reduce((a, b) => a + b, 0);
+  const calculateResult = (finalAnswers: Record<string, number>) => {
+    const totalScore = Object.values(finalAnswers).reduce((a, b) => a + b, 0);
     const averageScore = totalScore / FINOPS_QUESTIONS.length;
     
     const result = {
-      answers,
+      answers: finalAnswers,
       totalScore,
       averageScore,
       createdAt: new Date().toISOString(),

@@ -39,16 +39,19 @@ function validateCoreBusinessAdherence(coreBusinessData: Record<string, string>)
 export async function generateFinOpsReport(
   companyData: { name: string; sector: string; size: string },
   assessmentData: { averageScore: number; totalScore: number; answers: Record<string, number> },
-  coreBusinessData: Record<string, string>
+  coreBusinessData?: Record<string, string>
 ) {
-  // ── Guardrail: Validate core business data adherence ──
-  const validation = validateCoreBusinessAdherence(coreBusinessData);
-  if (!validation.valid) {
-    return `⚠️ **Relatório Rejeitado — Dados Insuficientes do Core Business**\n\n` +
-      `O sistema detectou que os seguintes dados obrigatórios sobre o ambiente de negócios do cliente não foram preenchidos:\n\n` +
-      validation.missingFields.map(f => `- ❌ ${f}`).join('\n') +
-      `\n\n**Ação necessária:** Retorne à etapa de Diagnóstico e preencha todos os campos obrigatórios sobre a infraestrutura e operações reais do cliente antes de gerar o relatório.\n\n` +
-      `> Este controle existe para garantir que o relatório diagnostique o **ambiente de negócios do cliente**, e não apenas riscos genéricos de TI (Guardrail de Governança GenAI — ISO 27001 A.8).`;
+  // ── Guardrail: Validate core business data adherence (only if data was provided) ──
+  const cbData = coreBusinessData || {};
+  if (coreBusinessData) {
+    const validation = validateCoreBusinessAdherence(coreBusinessData);
+    if (!validation.valid) {
+      return `⚠️ **Relatório Rejeitado — Dados Insuficientes do Core Business**\n\n` +
+        `O sistema detectou que os seguintes dados obrigatórios sobre o ambiente de negócios do cliente não foram preenchidos:\n\n` +
+        validation.missingFields.map(f => `- ❌ ${f}`).join('\n') +
+        `\n\n**Ação necessária:** Retorne à etapa de Diagnóstico e preencha todos os campos obrigatórios sobre a infraestrutura e operações reais do cliente antes de gerar o relatório.\n\n` +
+        `> Este controle existe para garantir que o relatório diagnostique o **ambiente de negócios do cliente**, e não apenas riscos genéricos de TI (Guardrail de Governança GenAI — ISO 27001 A.8).`;
+    }
   }
 
   // ── Build contextual prompt focused on client's core business ──
@@ -67,14 +70,14 @@ Porte: ${companyData.size}
 ═══════════════════════════════════════════════
 DIAGNÓSTICO DO CORE BUSINESS (DADOS REAIS)
 ═══════════════════════════════════════════════
-Sistema ERP / Sistema Central: ${coreBusinessData.erp_system || 'Não informado'}
-Integração de Dados do ERP: ${coreBusinessData.erp_integration || 'Não informado'}
-Operações Principais: ${coreBusinessData.core_operations || 'Não informado'}
-Infraestrutura Física de TI: ${coreBusinessData.physical_infrastructure || 'Não informado'}
-Estágio de Adoção de Nuvem: ${coreBusinessData.cloud_status || 'Não informado'}
-Plano Estratégico de Modernização: ${coreBusinessData.strategic_plan || 'Não informado'}
-Dores / Problemas Conhecidos: ${coreBusinessData.known_pain_points || 'Não informado'}
-Requisitos Regulatórios: ${coreBusinessData.compliance_requirements || 'Não informado'}
+Sistema ERP / Sistema Central: ${cbData.erp_system || 'Não informado'}
+Integração de Dados do ERP: ${cbData.erp_integration || 'Não informado'}
+Operações Principais: ${cbData.core_operations || 'Não informado'}
+Infraestrutura Física de TI: ${cbData.physical_infrastructure || 'Não informado'}
+Estágio de Adoção de Nuvem: ${cbData.cloud_status || 'Não informado'}
+Plano Estratégico de Modernização: ${cbData.strategic_plan || 'Não informado'}
+Dores / Problemas Conhecidos: ${cbData.known_pain_points || 'Não informado'}
+Requisitos Regulatórios: ${cbData.compliance_requirements || 'Não informado'}
 
 ═══════════════════════════════════════════════
 RESULTADOS DO QUESTIONÁRIO DE MATURIDADE
